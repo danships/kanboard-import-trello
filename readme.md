@@ -20,6 +20,7 @@ Perform a `git clone` or download this repository as a zip file to your local PC
 - Creation and modification timestamps are not copied
 - Attachments are not imported, but are attempted to be downloaded and stored in the folder you are executing the command from.
 - Not all comments can be copied. This is a result of the structure of the Trello export. Comments are not exported as part of a card. They are extracted from the list of actions, which is limited to 1000.
+- JSON files from large boards (large in size) may be rejected with an invalid JSON error. When this occurs it might help to increase the PHP memory limit using the `memory_limit` value in your `php.ini`
 
 #Credits
 The JSON RPC API interface and the JSON client itself from [@fguillot](https://github.com/fguillot) make creating this script relatively easy.
