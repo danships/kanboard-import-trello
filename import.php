@@ -2,6 +2,9 @@
 require_once(dirname(__FILE__) . '/vendor/autoload.php');
 use JsonRPC\Client;
 
+require_once(dirname(__FILE__) . '/util.php');
+setTimezone("GMT");
+
 /**------ FUNCTIONS ---------**/
 if (!function_exists('json_last_error_msg')) {
     function json_last_error_msg() {
