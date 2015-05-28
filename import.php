@@ -90,6 +90,10 @@ if ($trelloObj->closed) {
 //add the lists
 echo 'Adding lists.' . PHP_EOL;
 foreach ($trelloObj->lists as $list) {
+	if ($list->closed) {
+		// ignore archived lists
+		continue;
+	}
 	$columnId = $client->addColumn($projectId, $list->name);
 	$trelloLists[$list->id] = $columnId;
 }
@@ -97,7 +101,18 @@ foreach ($trelloObj->lists as $list) {
 //add each card
 echo 'Adding cards.' . PHP_EOL;
 foreach ($trelloObj->cards as $card) {
+	if ($card->closed) {
+		// ignore archived cards
+		continue;
+	}
+
+	if (!array_key_exists($card->idList, $trelloLists)) {
+		// the list is closed
+		continue;
+	}
+
 	$columnId = $trelloLists[$card->idList];
+
 	$dueDate = $card->due !== null ? date('Y-m-d', strtotime($card->due)) : null;
 	
 	//Kanboard supports only one category, take the first one of the Trello labels
@@ -167,6 +182,10 @@ $statusTodo = 0;
 $statusDone = 2;
 foreach ($trelloObj->checklists as $checkList) {
 	foreach ($checkList->checkItems as $checkItem) {
+		if (!array_key_exists($checkList->idCard, $trelloCards)) {
+			// card is closed
+			continue;
+		}
 		$title = $checkList->name . ' - ' . $checkItem->name;
 		$taskId = $trelloCards[$checkList->idCard];
 		$status = $checkItem->state === 'incomplete' ? $statusTodo : $statusDone;
@@ -179,6 +198,10 @@ if ($userId !== null) {
 	echo 'Processing comments.' . PHP_EOL;
 	foreach ($trelloObj->actions as $action) {
 		if ($action->type === 'commentCard') {
+			if (!array_key_exists($action->data->card->id, $trelloCards)) {
+				// card is closed
+				continue;
+			}
 			$taskId = $trelloCards[$action->data->card->id];
 			$text = $action->data->text;
 			$client->createComment($taskId, $userId, $text);
