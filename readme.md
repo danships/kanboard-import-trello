@@ -9,18 +9,18 @@ If you have any suggestions or found an issue, please report an [issue](https://
 Perform a `git clone` or download this repository as a zip file to your local PC. Execute `composer install` to install the RPC client dependency.
 
 ##Usage
-`php import.php http://server/jsonrpc.php apitoken jsonfile%s [userId]`
+
+    php import.php http://server/jsonrpc.php apitoken trellokey trellotoken trelloboard userid
 
 - server URL, this is the URL to your kanboardservers' jsonrpc.php file
 - apiToken, this is the api token for the RPC calls. You can find this value in Settings -> API.
-- jsonfile, the json that you got from Trello by doing: Menu -> Share, Print and Export... -> Export JSON
+- trelloKey and trelloToken. You can get yourself a key and a token to your board from https://trello.com/app-key (look for "Click here to request a token to be used in the example")
+- trelloboard, the shortlink of your Trello Board. You can find that in the URL in your webbrowser, eg. in https://trello.com/b/AbCdEf5g/my-board it would be the AbCdEf5g
 - userId, this value is optional. Comments in kanboard require a user that writes the comment. If a valid userId is provided then comments are also copied.
 
 ##Known limitations
 - Creation and modification timestamps are not copied
 - Attachments are not imported, but are attempted to be downloaded and stored in the folder you are executing the command from.
-- Not all comments can be copied. This is a result of the structure of the Trello export. Comments are not exported as part of a card. They are extracted from the list of actions, which is limited to 1000.
-- JSON files from large boards (large in size) may be rejected with an invalid JSON error. When this occurs it might help to increase the PHP memory limit using the `memory_limit` value in your `php.ini`
 
 #Credits
 The JSON RPC API interface and the JSON client itself from [@fguillot](https://github.com/fguillot) make creating this script relatively easy.
