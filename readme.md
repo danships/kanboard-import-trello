@@ -26,3 +26,5 @@ Perform a `git clone` or download this repository as a zip file to your local PC
 The JSON RPC API interface and the JSON client itself from [@fguillot](https://github.com/fguillot) make creating this script relatively easy.
 
 Also thanks to Trello for making an awesome product, unfortunately it is only available in a hosted version.
+
+Many thanks to [@tpokorra] for providing a pull request to use the Trello API.
