@@ -2,6 +2,9 @@
 require_once(dirname(__FILE__) . '/vendor/autoload.php');
 use JsonRPC\Client;
 
+require_once(dirname(__FILE__) . '/util.php');
+setTimezone("GMT");
+
 /**------ FUNCTIONS ---------**/
 if (!function_exists('json_last_error_msg')) {
     function json_last_error_msg() {
@@ -19,30 +22,29 @@ if (!function_exists('json_last_error_msg')) {
 }
 /**-------- END FUNCTIONS --------------**/
 
-if ($argc !== 4 && $argc !== 5) {
+if ($argc !== 6 && $argc !== 7) {
 	echo 'Use this small tool to import your Trello JSON export into your kanboard, using it JSON-RPC interface.' . PHP_EOL;
-	printf('Usage: php %s http://server/jsonrpc.php apitoken jsonfile%s [userId]', $argv[0], PHP_EOL);
-	echo 'The user id is optional. If you provide it, comments will be created with that userId.';
+	printf('Usage: php %s http://server/jsonrpc.php apitoken trellokey trellotoken trelloboard [userId]%s', $argv[0], PHP_EOL);
+	echo 'To get the Trello key and token, login to Trello and go to https://trello.com/app-key'.PHP_EOL;
+	echo 'The user id is optional. If you provide it, comments will be created with that userId.'.PHP_EOL;
 	die;
 }
 
 $server = $argv[1];
 $token = $argv[2];
-$jsonFile = $argv[3];
+$trellokey = $argv[3];
+$trellotoken = $argv[4];
+$trelloboard = $argv[5];
 $userId = null;
-if (isset($argv[4])) {
-	$userId = $argv[4];
+if (isset($argv[6])) {
+	$userId = $argv[6];
 }
 
-if (!is_readable($jsonFile)) {
-	printf('Unable to read file %s!', $jsonFile);
-	exit(1);
-}
-
-$jsonString = file_get_contents($jsonFile);
+$jsonString = file_get_contents("https://trello.com/1/boards/".$trelloboard."?key=".$trellokey."&token=".$trellotoken);
 $trelloObj = json_decode($jsonString);
 if (empty($trelloObj)) {
-	printf('Unable to parse JSON file %s, is it valid? %s', $jsonFile, json_last_error_msg());
+	printf($jsonString);
+	printf('Unable to parse JSON response, is it valid? %s', json_last_error_msg());
 	die(1);
 }
 
@@ -58,6 +60,13 @@ try {
 	$projects = null; //explicitly set it to null, to trigger an error
 }
 
+$users = $client->getAllUsers();
+foreach ($users as $user) {
+	if ($user['username'] == $userId || $userId == null) {
+		$userId = $user['id'];
+	}
+}
+
 if (!is_array($projects)) {
 	echo 'Unable to fetch the list of projects, is the server url / token correct?' . PHP_EOL;
 	die(1);
@@ -66,12 +75,16 @@ if (!is_array($projects)) {
 //variables
 $trelloLists = array();
 $trelloLabels = array(); //we will store all label names, but not add them immediately, only when used
-$trelloCards = array();
 $trelloAttachments = array();
 
 //create the project
 echo 'Creating project.' . PHP_EOL;
 $projectId = $client->createProject($trelloObj->name);
+$counter=0;
+while (empty($projectId)) {
+$projectId = $client->createProject($trelloObj->name.$counter++);
+//  die("We could not create the project, perhaps it already exists?".PHP_EOL);
+}
 
 //remove the columns created by default
 $columns = $client->getColumns($projectId);
@@ -80,21 +93,53 @@ foreach ($columns as $column) {
 }
 
 //set the public/private status of the project
-if ($trelloObj->closed) {
-	$client->updateProject(array('id' => $projectId, 'is_public' => false));
+if ($trelloObj->prefs->permissionLevel=="private") {
+        echo "project is private".PHP_EOL;
+	// $client->updateProject(array('id' => $projectId, 'is_public' => false));
 }
+
+# will only get lists that are not archived
+$jsonString = file_get_contents("https://trello.com/1/boards/".$trelloboard."/lists?key=".$trellokey."&token=".$trellotoken);
+$trelloObjLists = json_decode($jsonString);
 
 //add the lists
 echo 'Adding lists.' . PHP_EOL;
-foreach ($trelloObj->lists as $list) {
+foreach ($trelloObjLists as $list) {
+	if ($list->closed) {
+		// ignore archived lists
+		continue;
+	}
+	echo 'Creating list '.$list->name.PHP_EOL;
 	$columnId = $client->addColumn($projectId, $list->name);
 	$trelloLists[$list->id] = $columnId;
+
+	//add each card
+	echo 'Adding cards.' . PHP_EOL;
+        $query="https://trello.com/1/lists/".$list->id."?key=".$trellokey."&token=".$trellotoken."&cards=open&card_fields=all&card_checklists=all&members=all&member_fields=all&membersInvited=all&checklists=all&organization=true&organization_fields=all&fields=all"; // &actions=commentCard,copyCommentCard&card_attachments=true";
+        $jsonCards = file_get_contents($query);
+	$trelloObjCards = json_decode($jsonCards);
+
+	foreach ($trelloObjCards->cards as $card) {
+		addCard($projectId, $columnId, $card);
+	}
 }
 
-//add each card
-echo 'Adding cards.' . PHP_EOL;
-foreach ($trelloObj->cards as $card) {
-	$columnId = $trelloLists[$card->idList];
+echo 'All done!' . PHP_EOL;
+die;
+
+function addCard($projectId, $columnId, $card)
+{
+global $trellokey;
+global $trellotoken;
+global $trelloLabels;
+global $client;
+global $userId;
+
+	if ($card->closed) {
+		// ignore archived cards
+		return;
+	}
+
 	$dueDate = $card->due !== null ? date('Y-m-d', strtotime($card->due)) : null;
 	
 	//Kanboard supports only one category, take the first one of the Trello labels
@@ -110,11 +155,11 @@ foreach ($trelloObj->cards as $card) {
 			$trelloLabels[$trelloLabel->id] = $categoryId;
 		}
 	}
-	
+
 	$params = array(
-			'title' => $card->name,
-			'project_id' => $projectId,
-			'column_id' => $columnId
+		'title' => $card->name,
+		'project_id' => $projectId,
+		'column_id' => $columnId
 	);
 	if ($card->desc !== null) {
 		$params['description'] = $card->desc;
@@ -128,60 +173,103 @@ foreach ($trelloObj->cards as $card) {
 	if ($categoryId !== null) {
 		$params['category_id'] = $categoryId;
 	}
+	if ($userId !== null) {
+		$params['owner_id'] = $userId;
+	}
 	$taskId = $client->createTask($params);
-	$trelloCards[$card->id] = $taskId;
-	
-	//download attachments
-	if (count($card->attachments) > 0) {
-		foreach ($card->attachments as $attachment) {
+
+	if ($card->badges->comments > 0) {
+		$jsonString = 
+			file_get_contents("https://trello.com/1/cards/".
+				$card->shortLink."/actions?key=".$trellokey."&token=".$trellotoken."&filter=all");
+		$cardDetails = json_decode($jsonString);
+		addComments($cardDetails, $taskId);
+	}
+
+	if ($card->badges->checkItems > 0) {
+		$jsonString = 
+			file_get_contents("https://trello.com/1/cards/".
+				$card->shortLink."/checklists?key=".$trellokey."&token=".$trellotoken);
+		$cardDetails = json_decode($jsonString);
+		addCheckItems($cardDetails, $taskId);
+	}
+
+	if ($card->badges->attachments > 0) {
+		$jsonString = 
+			file_get_contents("https://trello.com/1/cards/".
+				$card->shortLink."/attachments?key=".$trellokey."&token=".$trellotoken);
+		$cardDetails = json_decode($jsonString);
+		addAttachments($card, $cardDetails, $taskId);
+	}
+}
+
+//download attachments
+function addAttachments($card, $cardDetails, $taskId)
+{
+global $userId;
+global $client;
+
+	foreach ($cardDetails as $attachment) {
+		if ($attachment->isUpload) {
 			$filename = $taskId . '_' . $attachment->name;
 			printf('Downloading attachment for task %s to %s.%s', $card->name, $filename, PHP_EOL);
 			$fpOut = fopen($filename, 'w');
-			
+
 			//Here is the file we are downloading, replace spaces with %20
 			$ch = curl_init($attachment->url);
-			 
+		 
 			curl_setopt($ch, CURLOPT_TIMEOUT, 50);
-			 
+		 
 			//give curl the file pointer so that it can write to it
 			curl_setopt($ch, CURLOPT_FILE, $fpOut);
 			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-			 
+		 
 			$data = curl_exec($ch);//get curl response
 			if ($data === false) {
 				printf('Unable to download attachment: %s%s', curl_error($ch), PHP_EOL);
 			}
-			 
+
 			//done
 			curl_close($ch);
+
+			// add a comment about the file
+			$text = "There was a file link in Trello, the file was called ".$attachment->name."\n\nSee local file ".$filename."\n\nThe original link is [".$attachment->name."](".$attachment->url.")";
+			$client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+		} else {
+			// just an url, add a comment
+			$text = $attachment->url;
+			$client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
 		}
 	}
 }
 
 //add checklists as subtasks
-echo 'Adding checklists.' . PHP_EOL;
+function addCheckItems($cardDetails, $taskId)
+{
+global $userId;
+global $client;
+
 $statusTodo = 0;
 $statusDone = 2;
-foreach ($trelloObj->checklists as $checkList) {
-	foreach ($checkList->checkItems as $checkItem) {
-		$title = $checkList->name . ' - ' . $checkItem->name;
-		$taskId = $trelloCards[$checkList->idCard];
-		$status = $checkItem->state === 'incomplete' ? $statusTodo : $statusDone;
-		$client->createSubtask(array('task_id' => $taskId, 'title' => $title, 'status' => $status));
-	}
-}
 
-//process all actions to see if there are comment Actions
-if ($userId !== null) {
-	echo 'Processing comments.' . PHP_EOL;
-	foreach ($trelloObj->actions as $action) {
-		if ($action->type === 'commentCard') {
-			$taskId = $trelloCards[$action->data->card->id];
-			$text = $action->data->text;
-			$client->createComment($taskId, $userId, $text);
+	foreach ($cardDetails as $checkList) {
+		foreach ($checkList->checkItems as $checkItem) {
+			$title = $checkList->name . ' - ' . $checkItem->name;
+			$status = $checkItem->state === 'incomplete' ? $statusTodo : $statusDone;
+			$client->createSubtask(array('task_id' => $taskId, 'title' => $title, 'status' => $status));
 		}
 	}
 }
 
-echo 'All done!' . PHP_EOL;
-die;
+function addComments($cardDetails, $taskId)
+{
+global $userId;
+global $client;
+	foreach ($cardDetails as $comment) {
+		if ($comment->type === 'commentCard') {
+			$text = $comment->data->text;
+			$client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+		}
+	}
+}
+
