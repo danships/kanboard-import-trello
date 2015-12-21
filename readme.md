@@ -6,7 +6,8 @@ your self-hosted [kanboard.net](http://www.kanboard.net) instance.
 If you have any suggestions or found an issue, please report an [issue](https://github.com/matueranet/kanboard-import-trello/issues), suggestions are welcome!
 
 ##Installation
-Perform a `git clone` or download this repository as a zip file to your local PC. Execute `composer install` to install the RPC client dependency.
+- Perform a `git clone` or download this repository as a zip file to your local PC-
+- Execute `composer install` to install the RPC client dependency.
 
 ##Usage
 
@@ -27,4 +28,4 @@ The JSON RPC API interface and the JSON client itself from [@fguillot](https://g
 
 Also thanks to Trello for making an awesome product, unfortunately it is only available in a hosted version.
 
-Many thanks to [@tpokorra] for providing a pull request to use the Trello API.
+Many thanks to [@tpokorra](https://github.com/tpokorra) for providing a pull request to use the Trello API.
