@@ -173,9 +173,10 @@ global $userId;
 	if ($categoryId !== null) {
 		$params['category_id'] = $categoryId;
 	}
-	if ($userId !== null) {
+	//TODO temporary disabled, seems to cause errors when addings tasks in later Kanboard versions >1.0.30
+	/*if ($userId !== null) {
 		$params['owner_id'] = $userId;
-	}
+	}*/
 	$taskId = $client->createTask($params);
 
 	if ($card->badges->comments > 0) {
