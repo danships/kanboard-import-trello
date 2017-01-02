@@ -200,12 +200,12 @@ global $userId;
 			file_get_contents("https://trello.com/1/cards/".
 				$card->shortLink."/attachments?key=".$trellokey."&token=".$trellotoken);
 		$cardDetails = json_decode($jsonString);
-		addAttachments($card, $cardDetails, $taskId);
+		addAttachments($card, $cardDetails, $taskId, $projectId);
 	}
 }
 
 //download attachments
-function addAttachments($card, $cardDetails, $taskId)
+function addAttachments($card, $cardDetails, $taskId, $projectId)
 {
 global $userId;
 global $client;
@@ -214,15 +214,14 @@ global $client;
 		if ($attachment->isUpload) {
 			$filename = $taskId . '_' . $attachment->name;
 			printf('Downloading attachment for task %s to %s.%s', $card->name, $filename, PHP_EOL);
-			$fpOut = fopen($filename, 'w');
 
 			//Here is the file we are downloading, replace spaces with %20
 			$ch = curl_init($attachment->url);
 		 
 			curl_setopt($ch, CURLOPT_TIMEOUT, 50);
 		 
-			//give curl the file pointer so that it can write to it
-			curl_setopt($ch, CURLOPT_FILE, $fpOut);
+			//return file in variable
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 		 
 			$data = curl_exec($ch);//get curl response
@@ -233,9 +232,8 @@ global $client;
 			//done
 			curl_close($ch);
 
-			// add a comment about the file
-			$text = "There was a file link in Trello, the file was called ".$attachment->name."\n\nSee local file ".$filename."\n\nThe original link is [".$attachment->name."](".$attachment->url.")";
-			$client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			// upload file as an attachment
+			$client->createTaskFile(array('task_id' => $taskId, 'filename' => $filename, 'project_id' => $projectId, 'blob' => base64_encode($data)));
 		} else {
 			// just an url, add a comment
 			$text = $attachment->url;
