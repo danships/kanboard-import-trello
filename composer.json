@@ -1,6 +1,6 @@
 {
     "require": {
-        "fguillot/json-rpc": "1.0.0",
+        "fguillot/json-rpc": "1.2.3",
 		"ext-curl": "*"
     }
 }
