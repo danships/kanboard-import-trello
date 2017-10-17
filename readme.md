@@ -1,15 +1,15 @@
-#Kanboard Trello import
+# Kanboard Trello import
 
 This is a simple command-line script to move your [Trello-based](http://www.trello.com) boards to
 your self-hosted [kanboard.net](http://www.kanboard.net) instance.
 
 If you have any suggestions or found an issue, please report an [issue](https://github.com/matueranet/kanboard-import-trello/issues), suggestions are welcome!
 
-##Installation
+## Installation
 - Perform a `git clone` or download this repository as a zip file to your local PC-
 - Execute `composer install` to install the RPC client dependency.
 
-##Usage
+## Usage
 
     php import.php http://server/jsonrpc.php apitoken trellokey trellotoken trelloboard userid
 
@@ -19,11 +19,11 @@ If you have any suggestions or found an issue, please report an [issue](https://
 - trelloboard, the shortlink of your Trello Board. You can find that in the URL in your webbrowser, eg. in https://trello.com/b/AbCdEf5g/my-board it would be the AbCdEf5g
 - userId, this value is optional. Comments in kanboard require a user that writes the comment. If a valid userId is provided then comments are also copied.
 
-##Known limitations
+## Known limitations
 - Creation and modification timestamps are not copied
 - Attachments are not imported, but are attempted to be downloaded and stored in the folder you are executing the command from.
 
-#Credits
+# Credits
 The JSON RPC API interface and the JSON client itself from [@fguillot](https://github.com/fguillot) make creating this script relatively easy.
 
 Also thanks to Trello for making an awesome product, unfortunately it is only available in a hosted version.
