@@ -3,7 +3,7 @@
 This is a simple command-line script to move your [Trello-based](http://www.trello.com) boards to
 your self-hosted [kanboard.net](http://www.kanboard.net) instance.
 
-If you have any suggestions or found an issue, please report an [issue](https://github.com/matueranet/kanboard-import-trello/issues), suggestions are welcome!
+If you have any suggestions or find an issue, please report an [issue](https://github.com/matueranet/kanboard-import-trello/issues), suggestions are welcome!
 
 ## Installation
 - Perform a `git clone` or download this repository as a zip file to your local PC-
@@ -18,6 +18,9 @@ If you have any suggestions or found an issue, please report an [issue](https://
 - trelloKey and trelloToken. You can get yourself a key and a token to your board from https://trello.com/app-key (look for "Click here to request a token to be used in the example")
 - trelloboard, the shortlink of your Trello Board. You can find that in the URL in your webbrowser, eg. in https://trello.com/b/AbCdEf5g/my-board it would be the AbCdEf5g
 - userId, this value is optional. Comments in kanboard require a user that writes the comment. If a valid userId is provided then comments are also copied.
+
+Please note that after the import there will be no users linked to the board. You can use the kanboard admin account to access the Permissions page of
+the new project to add users to it.
 
 ## Known limitations
 - Creation and modification timestamps are not copied
