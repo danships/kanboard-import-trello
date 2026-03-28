@@ -207,6 +207,8 @@ global $userId;
 //download attachments
 function addAttachments($card, $cardDetails, $taskId, $projectId)
 {
+global $trellokey;
+global $trellotoken;
 global $userId;
 global $client;
 
@@ -218,15 +220,17 @@ global $client;
 			//Here is the file we are downloading, replace spaces with %20
 			$ch = curl_init($attachment->url);
 		 
-			curl_setopt($ch, CURLOPT_TIMEOUT, 50);
+			curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 		 
 			//return file in variable
 			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+			curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: OAuth oauth_consumer_key=\"$trellokey\", oauth_token=\"$trellotoken\""]);
 		 
 			$data = curl_exec($ch);//get curl response
-			if ($data === false) {
+			if ($data === false || curl_error($ch)) {
 				printf('Unable to download attachment: %s%s', curl_error($ch), PHP_EOL);
+				continue;
 			}
 
 			//done
