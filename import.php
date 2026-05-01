@@ -44,7 +44,9 @@ $jsonString = file_get_contents("https://trello.com/1/boards/".$trelloboard."?ke
 $trelloObj = json_decode($jsonString);
 if (empty($trelloObj)) {
 	printf($jsonString);
-	printf('Unable to parse JSON response, is it valid? %s', json_last_error_msg());
+	echo PHP_EOL;
+	printf('Unable to parse JSON response for trelloObj, is it valid? %s', json_last_error_msg());
+	echo PHP_EOL;
 	die(1);
 }
 
@@ -78,13 +80,14 @@ $trelloLabels = array(); //we will store all label names, but not add them immed
 $trelloAttachments = array();
 
 //create the project
-echo 'Creating project.' . PHP_EOL;
+echo "Creating project '" . $trelloObj->name . "' ..." . PHP_EOL;
 $projectId = $client->createProject($trelloObj->name);
 $counter=0;
 while (empty($projectId)) {
 $projectId = $client->createProject($trelloObj->name.$counter++);
 //  die("We could not create the project, perhaps it already exists?".PHP_EOL);
 }
+echo "Created project '" . $trelloObj->name . "' (projectId=$projectId)" . PHP_EOL;
 
 //remove the columns created by default
 $columns = $client->getColumns($projectId);
@@ -101,23 +104,44 @@ if ($trelloObj->prefs->permissionLevel=="private") {
 # will only get lists that are not archived
 $jsonString = file_get_contents("https://trello.com/1/boards/".$trelloboard."/lists?key=".$trellokey."&token=".$trellotoken);
 $trelloObjLists = json_decode($jsonString);
+if (empty($trelloObjLists)) {
+	printf($jsonString);
+	echo PHP_EOL;
+	printf('Unable to parse JSON response for trelloObjLists, is it valid? %s', json_last_error_msg());
+	echo PHP_EOL;
+	die(1);
+}
+
 
 //add the lists
-echo 'Adding lists.' . PHP_EOL;
+echo "Found " . count($trelloObjLists) . " lists" . PHP_EOL;
 foreach ($trelloObjLists as $list) {
 	if ($list->closed) {
 		// ignore archived lists
+		echo "  List {$list->name} is closed/archived. Ignored!" . PHP_EOL;
 		continue;
 	}
-	echo 'Creating list '.$list->name.PHP_EOL;
+	echo '  Creating list "' . $list->name . '"' . PHP_EOL;
 	$columnId = $client->addColumn($projectId, $list->name);
+	if ($columnId === false) {
+		echo "Error creating column! (projectId=$projectId, name='{$list->name}')" . PHP_EOL;
+		die(1);
+	}
 	$trelloLists[$list->id] = $columnId;
 
 	//add each card
-	echo 'Adding cards.' . PHP_EOL;
-        $query="https://trello.com/1/lists/".$list->id."?key=".$trellokey."&token=".$trellotoken."&cards=open&card_fields=all&card_checklists=all&members=all&member_fields=all&membersInvited=all&checklists=all&organization=true&organization_fields=all&fields=all"; // &actions=commentCard,copyCommentCard&card_attachments=true";
-        $jsonCards = file_get_contents($query);
+	$query="https://trello.com/1/lists/".$list->id."?key=".$trellokey."&token=".$trellotoken."&cards=open&card_fields=all&card_checklists=all&members=all&member_fields=all&membersInvited=all&checklists=all&organization=true&organization_fields=all&fields=all"; // &actions=commentCard,copyCommentCard&card_attachments=true";
+	$jsonCards = file_get_contents($query);
 	$trelloObjCards = json_decode($jsonCards);
+	if (empty($trelloObjCards)) {
+		printf($jsonString);
+		echo PHP_EOL;
+		printf('Unable to parse JSON response for trelloObjCards, is it valid? %s', json_last_error_msg());
+		echo PHP_EOL;
+		die(1);
+	}
+
+	echo "  Found " . count($trelloObjCards->cards) . " cards..." . PHP_EOL;
 
 	foreach ($trelloObjCards->cards as $card) {
 		addCard($projectId, $columnId, $card);
@@ -125,6 +149,7 @@ foreach ($trelloObjLists as $list) {
 }
 
 echo 'All done!' . PHP_EOL;
+echo "Project '" . $trelloObj->name . "' (projectId=$projectId)" . PHP_EOL;
 die;
 
 function addCard($projectId, $columnId, $card)
@@ -137,6 +162,7 @@ global $userId;
 
 	if ($card->closed) {
 		// ignore archived cards
+		echo "    card '{$card->name}' is closed/archived -> ignored." . PHP_EOL;
 		return;
 	}
 
@@ -156,6 +182,12 @@ global $userId;
 				$name = "({$colorId})";
 			}
 			$categoryId = $client->createCategory($projectId, $name);
+			if ($categoryId === false) {
+				echo "Error creating category! projectId=$projectId, name='$name'" . PHP_EOL;
+				print_r($card);
+				die(1);
+			}
+			echo "    Created category id=$categoryId projectId=$projectId name='$name'" . PHP_EOL;
 			$trelloLabels[$trelloLabel->id] = $categoryId;
 		}
 	}
@@ -182,12 +214,25 @@ global $userId;
 		$params['owner_id'] = $userId;
 	}*/
 	$taskId = $client->createTask($params);
+	if ($taskId === false) {
+		echo "Error creating task! " . print_r($params, true) . PHP_EOL;
+		die(1);
+	}
+	echo '    Added card \'' . $card->name . '\' with id ' . $taskId . PHP_EOL;
 
 	if ($card->badges->comments > 0) {
 		$jsonString = 
 			file_get_contents("https://trello.com/1/cards/".
 				$card->shortLink."/actions?key=".$trellokey."&token=".$trellotoken."&filter=all");
 		$cardDetails = json_decode($jsonString);
+		if (empty($cardDetails)) {
+			print_r($card);
+			printf($jsonString);
+			echo PHP_EOL;
+			printf('Unable to parse JSON response for cardDetails, is it valid? %s', json_last_error_msg());
+			echo PHP_EOL;
+			die(1);
+		}
 		addComments($cardDetails, $taskId);
 	}
 
@@ -196,6 +241,13 @@ global $userId;
 			file_get_contents("https://trello.com/1/cards/".
 				$card->shortLink."/checklists?key=".$trellokey."&token=".$trellotoken);
 		$cardDetails = json_decode($jsonString);
+		if (empty($cardDetails)) {
+			printf($jsonString);
+			echo PHP_EOL;
+			printf('Unable to parse JSON response for checklists, is it valid? %s', json_last_error_msg());
+			echo PHP_EOL;
+			die(1);
+		}
 		addCheckItems($cardDetails, $taskId);
 	}
 
@@ -204,6 +256,13 @@ global $userId;
 			file_get_contents("https://trello.com/1/cards/".
 				$card->shortLink."/attachments?key=".$trellokey."&token=".$trellotoken);
 		$cardDetails = json_decode($jsonString);
+		if (empty($cardDetails)) {
+			printf($jsonString);
+			echo PHP_EOL;
+			printf('Unable to parse JSON response for attachments, is it valid? %s', json_last_error_msg());
+			echo PHP_EOL;
+			die(1);
+		}
 		addAttachments($card, $cardDetails, $taskId, $projectId);
 	}
 }
@@ -216,12 +275,15 @@ global $trellotoken;
 global $userId;
 global $client;
 
+	echo "      Adding " . count($cardDetails) . " attachments..." . PHP_EOL;
+
 	foreach ($cardDetails as $attachment) {
 		if ($attachment->isUpload) {
 			$filename = $taskId . '_' . $attachment->name;
-			printf('Downloading attachment for task %s to %s.%s', $card->name, $filename, PHP_EOL);
+			printf('        Downloading attachment for task %s to %s.%s', $card->name, $filename, PHP_EOL);
 
 			//Here is the file we are downloading, replace spaces with %20
+			echo "        Downloading from " . $attachment->url . PHP_EOL;
 			$ch = curl_init($attachment->url);
 		 
 			curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -234,18 +296,31 @@ global $client;
 			$data = curl_exec($ch);//get curl response
 			if ($data === false || curl_error($ch)) {
 				printf('Unable to download attachment: %s%s', curl_error($ch), PHP_EOL);
-				continue;
+				die(1);
 			}
 
 			//done
 			curl_close($ch);
 
 			// upload file as an attachment
-			$client->createTaskFile(array('task_id' => $taskId, 'filename' => $filename, 'project_id' => $projectId, 'blob' => base64_encode($data)));
+			$data_size = strlen($data);
+			$blob = base64_encode($data);
+			$blobSize = strlen($blob);
+			echo "        Uploading $filename for task=$taskId projectId=$projectId data_size=$data_size blob size=$blobSize" . PHP_EOL;
+			$fileId = $client->createTaskFile(array('task_id' => $taskId, 'filename' => $filename, 'project_id' => $projectId, 'blob' => $blob));
+			if ($fileId === false) {
+				echo "Error uploading file!" . PHP_EOL;
+				die(1);
+			}
 		} else {
 			// just an url, add a comment
 			$text = $attachment->url;
-			$client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			$commentId = $client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			if ($commentId === false) {
+				echo "Error creating comment for attachment (task_id=$taskId, user_id=$userId, content=$text)!" . PHP_EOL;
+				print_r($attachment);
+				die(1);
+			}
 		}
 	}
 }
@@ -259,11 +334,16 @@ global $client;
 $statusTodo = 0;
 $statusDone = 2;
 
+	echo "      Adding " . count($cardDetails) . " check lists" . PHP_EOL;
 	foreach ($cardDetails as $checkList) {
 		foreach ($checkList->checkItems as $checkItem) {
 			$title = $checkList->name . ' - ' . $checkItem->name;
 			$status = $checkItem->state === 'incomplete' ? $statusTodo : $statusDone;
-			$client->createSubtask(array('task_id' => $taskId, 'title' => $title, 'status' => $status));
+			$subtaskId = $client->createSubtask(array('task_id' => $taskId, 'title' => $title, 'status' => $status));
+			if ($subtaskId === false) {
+				echo "Error creating subtask! (task_id=$taskId, title=$title, status=$status)" . PHP_EOL;
+				die(1);
+			}
 		}
 	}
 }
@@ -272,10 +352,16 @@ function addComments($cardDetails, $taskId)
 {
 global $userId;
 global $client;
+	echo "      Adding " . count($cardDetails) . " comments..." . PHP_EOL;
 	foreach ($cardDetails as $comment) {
 		if ($comment->type === 'commentCard') {
 			$text = $comment->data->text;
-			$client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			$commentId = $client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			if ($commentId === false) {
+				echo "Error creating comment! (task_id=$taskId, user_id=$userId, content length=" . strlen($text) . ")" . PHP_EOL;
+				die(1);
+			}
+			echo "        Created comment (id=$commentId)" . PHP_EOL;
 		}
 	}
 }
