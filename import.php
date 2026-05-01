@@ -390,9 +390,6 @@ global $attachmentTotalSizeInBytes;
 				die(1);
 			}
 
-			//done
-			curl_close($ch);
-
 			// upload file as an attachment
 			$data_size = strlen($data);
 			$blob = base64_encode($data);
