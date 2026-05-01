@@ -151,7 +151,11 @@ global $userId;
 		if (isset($trelloLabels[$trelloLabel->id])) {
 			$categoryId = $trelloLabels[$trelloLabel->id];
 		} else {
-			$categoryId = $client->createCategory($projectId, $trelloLabel->name);
+			$name = $trelloLabel->name;
+			if ($name == "") {
+				$name = "({$colorId})";
+			}
+			$categoryId = $client->createCategory($projectId, $name);
 			$trelloLabels[$trelloLabel->id] = $categoryId;
 		}
 	}
