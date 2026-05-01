@@ -39,6 +39,8 @@ $userId = null;
 if (isset($argv[6])) {
 	$userId = $argv[6];
 }
+// Adds the original trello user info to cards and comments
+$addTrelloUserInfo = TRUE;
 
 $jsonString = file_get_contents("https://trello.com/1/boards/".$trelloboard."?key=".$trellokey."&token=".$trellotoken);
 $trelloObj = json_decode($jsonString);
@@ -74,6 +76,17 @@ if (!is_array($projects)) {
 	die(1);
 }
 
+$dateFormatter = new IntlDateFormatter(
+		#'de_DE',
+		'en_US',
+		IntlDateFormatter::LONG,
+		IntlDateFormatter::LONG,
+		#'Europe/Berlin',
+		'America/Los_Angeles',
+		IntlDateFormatter::GREGORIAN
+);
+
+
 //stats
 $attachmentCount = 0;
 $attachmentTotalSizeInBytes = 0;
@@ -82,6 +95,7 @@ $attachmentTotalSizeInBytes = 0;
 $trelloLists = array();
 $trelloLabels = array(); //we will store all label names, but not add them immediately, only when used
 $trelloAttachments = array();
+$trelloUsers = array();
 
 //create the project
 echo "Creating project '" . $trelloObj->name . "' ..." . PHP_EOL;
@@ -168,6 +182,49 @@ echo "  Number of attachments: {$attachmentCount}" . PHP_EOL;
 echo "  Total size of attachments: {$attachmentTotalSizeInBytes} bytes" . PHP_EOL;
 die;
 
+function resolveTrelloUserId($idMember)
+{
+global $trellokey;
+global $trellotoken;
+global $trelloUsers;
+	if (isset($trelloUsers[$idMember])) {
+		return $trelloUsers[$idMember];
+	}
+
+	echo "- Resolving trello user id {$idMember}..." . PHP_EOL;
+	$jsonString = 
+			@file_get_contents("https://api.trello.com/1/members/".$idMember.
+				"?key=".$trellokey."&token=".$trellotoken."&fields=id,fullName,username");
+	if ($jsonString === FALSE) {
+		$memberDetails = "unknown";
+	} else {
+		$memberDetails = json_decode($jsonString);
+		if (empty($memberDetails)) {
+			printf($jsonString);
+			echo PHP_EOL;
+			printf('Unable to parse JSON response for memberDetails, is it valid? %s', json_last_error_msg());
+			echo PHP_EOL;
+			die(1);
+		}
+		$memberDetails = "{$memberDetails->username} ({$memberDetails->fullName})";
+	}
+	$trelloUsers[$idMember] = $memberDetails;
+	echo "  -> {$memberDetails}" . PHP_EOL;
+	return $memberDetails;
+}
+
+function formatActionMemberCreator($action)
+{
+global $dateFormatter;
+	if ($action->memberCreator) {
+		$memberDetails = "{$action->memberCreator->username} ({$action->memberCreator->fullName})";
+	} else {
+		$memberDetails = "unknown";
+	}
+	$formattedDate = $dateFormatter->format(new DateTimeImmutable($action->date));
+	return "by {$memberDetails} on {$formattedDate}";
+}
+
 function addCard($projectId, $columnId, $card)
 {
 global $trellokey;
@@ -175,11 +232,40 @@ global $trellotoken;
 global $trelloLabels;
 global $client;
 global $userId;
+global $addTrelloUserInfo;
+global $dateFormatter;
 
 	if ($card->closed) {
 		// ignore archived cards
 		echo "    card '{$card->name}' is closed/archived -> ignored." . PHP_EOL;
 		return;
+	}
+
+	# read all actions: https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-boardid-actions-get
+	# types: https://developer.atlassian.com/cloud/trello/guides/rest-api/action-types/
+	# interesting types: createCard, commentCard, copyCard, copyCommentCard
+	$jsonString = 
+		file_get_contents("https://trello.com/1/cards/".
+			$card->shortLink."/actions?key=".$trellokey."&token=".$trellotoken."&filter=createCard,commentCard,copyCard,copyCommentCard&memberCreator=true&memberCreator_fields=fullName,username&limit=200");
+	$cardActions = json_decode($jsonString);
+	if (empty($cardActions)) {
+		print_r($card);
+		printf($jsonString);
+		echo PHP_EOL;
+		printf('Unable to parse JSON response for cardActions, is it valid? %s', json_last_error_msg());
+		echo PHP_EOL;
+		die(1);
+	}
+
+	$createdInfo = "";
+	if ($addTrelloUserInfo === TRUE) {
+		foreach($cardActions as $action) {
+			if ($action->type === 'createCard') {
+				$createdInfo = "\n\n--\nCreated " . formatActionMemberCreator($action);
+			} else if ($action->type === 'copyCard') {
+				$createdInfo = "\n\n--\nCopied " . formatActionMemberCreator($action);
+			}
+		}
 	}
 
 	$dueDate = $card->due !== null ? date('Y-m-d', strtotime($card->due)) : null;
@@ -214,7 +300,7 @@ global $userId;
 		'column_id' => $columnId
 	);
 	if ($card->desc !== null) {
-		$params['description'] = $card->desc;
+		$params['description'] = $card->desc . $createdInfo;
 	}
 	if ($dueDate !== null) {
 		$params['date_due'] = $dueDate;
@@ -235,21 +321,7 @@ global $userId;
 	}
 	echo '    Added card \'' . $card->name . '\' with id ' . $taskId . PHP_EOL;
 
-	if ($card->badges->comments > 0) {
-		$jsonString = 
-			file_get_contents("https://trello.com/1/cards/".
-				$card->shortLink."/actions?key=".$trellokey."&token=".$trellotoken."&filter=all");
-		$cardDetails = json_decode($jsonString);
-		if (empty($cardDetails)) {
-			print_r($card);
-			printf($jsonString);
-			echo PHP_EOL;
-			printf('Unable to parse JSON response for cardDetails, is it valid? %s', json_last_error_msg());
-			echo PHP_EOL;
-			die(1);
-		}
-		addComments($cardDetails, $taskId);
-	}
+	addComments($cardActions, $taskId);
 
 	if ($card->badges->checkItems > 0) {
 		$jsonString = 
@@ -289,6 +361,8 @@ global $trellokey;
 global $trellotoken;
 global $userId;
 global $client;
+global $addTrelloUserInfo;
+global $dateFormatter;
 global $attachmentCount;
 global $attachmentTotalSizeInBytes;
 
@@ -336,12 +410,19 @@ global $attachmentTotalSizeInBytes;
 		} else {
 			// just an url, add a comment
 			$text = $attachment->url;
-			$commentId = $client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			$originalAuthor = "";
+			if ($addTrelloUserInfo === TRUE) {
+				$memberDetails = resolveTrelloUserId($attachment->idMember);
+				$formattedDate = $dateFormatter->format(new DateTimeImmutable($attachment->date));
+				$originalAuthor = "\n\n--\nCreated by {$memberDetails} on {$formattedDate}";
+			}
+			$commentId = $client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text . $originalAuthor));
 			if ($commentId === false) {
 				echo "Error creating comment for attachment (task_id=$taskId, user_id=$userId, content=$text)!" . PHP_EOL;
 				print_r($attachment);
 				die(1);
 			}
+			echo "        Created comment for attachment (id=$commentId)" . PHP_EOL;
 		}
 	}
 }
@@ -369,15 +450,31 @@ $statusDone = 2;
 	}
 }
 
-function addComments($cardDetails, $taskId)
+function addComments($cardActions, $taskId)
 {
 global $userId;
 global $client;
-	echo "      Adding " . count($cardDetails) . " comments..." . PHP_EOL;
-	foreach ($cardDetails as $comment) {
-		if ($comment->type === 'commentCard') {
+global $addTrelloUserInfo;
+global $dateFormatter;
+	$commentCount = 0;
+	foreach ($cardActions as $action) {
+		if ($action->type === 'commentCard' || $action->type === 'copyCommentCard') {
+			$commentCount += 1;
+		}
+	}
+	if ($commentCount === 0) {
+		return;
+	}
+
+	echo "      Adding {$commentCount} comments..." . PHP_EOL;
+	foreach ($cardActions as $comment) {
+		if ($comment->type === 'commentCard' || $comment->type === 'copyCommentCard') {
 			$text = $comment->data->text;
-			$commentId = $client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text));
+			$originalAuthor = "";
+			if ($addTrelloUserInfo === TRUE) {
+				$originalAuthor = "\n\n--\nComment created " . formatActionMemberCreator($comment);
+			}
+			$commentId = $client->createComment(array('task_id' => $taskId, 'user_id' => $userId, 'content' => $text . $originalAuthor));
 			if ($commentId === false) {
 				echo "Error creating comment! (task_id=$taskId, user_id=$userId, content length=" . strlen($text) . ")" . PHP_EOL;
 				die(1);
