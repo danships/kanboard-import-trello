@@ -74,6 +74,10 @@ if (!is_array($projects)) {
 	die(1);
 }
 
+//stats
+$attachmentCount = 0;
+$attachmentTotalSizeInBytes = 0;
+
 //variables
 $trelloLists = array();
 $trelloLabels = array(); //we will store all label names, but not add them immediately, only when used
@@ -160,6 +164,8 @@ foreach ($trelloObjLists as $list) {
 
 echo 'All done!' . PHP_EOL;
 echo "Project '" . $trelloObj->name . "' (projectId=$projectId)" . PHP_EOL;
+echo "  Number of attachments: {$attachmentCount}" . PHP_EOL;
+echo "  Total size of attachments: {$attachmentTotalSizeInBytes} bytes" . PHP_EOL;
 die;
 
 function addCard($projectId, $columnId, $card)
@@ -283,6 +289,8 @@ global $trellokey;
 global $trellotoken;
 global $userId;
 global $client;
+global $attachmentCount;
+global $attachmentTotalSizeInBytes;
 
 	echo "      Adding " . count($cardDetails) . " attachments..." . PHP_EOL;
 
@@ -316,11 +324,15 @@ global $client;
 			$blob = base64_encode($data);
 			$blobSize = strlen($blob);
 			echo "        Uploading $filename for task=$taskId projectId=$projectId data_size=$data_size blob size=$blobSize" . PHP_EOL;
+			$attachmentCount += 1;
+			$attachmentTotalSizeInBytes += $data_size;
+
 			$fileId = $client->createTaskFile(array('task_id' => $taskId, 'filename' => $filename, 'project_id' => $projectId, 'blob' => $blob));
 			if ($fileId === false) {
 				echo "Error uploading file!" . PHP_EOL;
 				die(1);
 			}
+			echo "        Attachment (fileId=$fileId) created" . PHP_EOL;
 		} else {
 			// just an url, add a comment
 			$text = $attachment->url;
