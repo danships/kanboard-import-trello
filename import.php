@@ -26,7 +26,7 @@ if ($argc !== 6 && $argc !== 7) {
 	echo 'Use this small tool to import your Trello JSON export into your kanboard, using it JSON-RPC interface.' . PHP_EOL;
 	printf('Usage: php %s http://server/jsonrpc.php apitoken trellokey trellotoken trelloboard [userId]%s', $argv[0], PHP_EOL);
 	echo 'To get the Trello key and token, login to Trello and go to https://trello.com/app-key'.PHP_EOL;
-	echo 'The user id is optional. If you provide it, comments will be created with that userId.'.PHP_EOL;
+	echo 'The user id is optional. If you provide it, cards and comments will be created with that userId.'.PHP_EOL;
 	die;
 }
 
@@ -88,6 +88,16 @@ $projectId = $client->createProject($trelloObj->name.$counter++);
 //  die("We could not create the project, perhaps it already exists?".PHP_EOL);
 }
 echo "Created project '" . $trelloObj->name . "' (projectId=$projectId)" . PHP_EOL;
+
+if ($userId !== null) {
+	$projectPermission = $client->addProjectUser($projectId, $userId, 'project-manager');
+	if ($projectPermission === TRUE) {
+		echo " Add user $userId as project-manager" . PHP_EOL;
+	} else {
+		echo " Could not add user $userId as project-manager!" . PHP_EOL;
+		die(1);
+	}
+}
 
 //remove the columns created by default
 $columns = $client->getColumns($projectId);
@@ -209,10 +219,9 @@ global $userId;
 	if ($categoryId !== null) {
 		$params['category_id'] = $categoryId;
 	}
-	//TODO temporary disabled, seems to cause errors when addings tasks in later Kanboard versions >1.0.30
-	/*if ($userId !== null) {
-		$params['owner_id'] = $userId;
-	}*/
+	if ($userId !== null) {
+		$params['creator_id'] = $userId;
+	}
 	$taskId = $client->createTask($params);
 	if ($taskId === false) {
 		echo "Error creating task! " . print_r($params, true) . PHP_EOL;
